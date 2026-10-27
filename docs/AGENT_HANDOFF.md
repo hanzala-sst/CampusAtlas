@@ -5,7 +5,7 @@
 ## Current state
 - **Last updated:** 2026-10-27 12:35 IST
 - **Current milestone:** 1 (Complete)
-- **Git branch / last commit:** master (initialized, uncommitted working tree)
+- **Git branch / last commit:** master / dd1b2e5 (Milestone 1 baseline commit)
 - **App status:** client working / API working (tested via test suite and build verification)
 
 ## Decisions locked
