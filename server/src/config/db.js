@@ -10,18 +10,22 @@ let dbStatus = {
 
 export function getDatabaseStatus() {
   const readyStates = {
-    0: 'disconnected',
+    0: dbStatus.status === 'error' ? 'error' : 'disconnected',
     1: 'connected',
     2: 'connecting',
     3: 'disconnecting',
   };
   
   return {
-    status: readyStates[mongoose.connection.readyState] || 'unknown',
+    status: readyStates[mongoose.connection.readyState] || dbStatus.status || 'unknown',
     host: mongoose.connection.host || null,
     database: mongoose.connection.name || null,
     lastError: dbStatus.lastError,
   };
+}
+
+export function isDatabaseConnected() {
+  return mongoose.connection.readyState === 1;
 }
 
 export async function connectDB() {
@@ -47,28 +51,6 @@ export async function connectDB() {
     console.log(`[Database] Connected to MongoDB host: ${conn.connection.host} (${conn.connection.name})`);
     return conn;
   } catch (error) {
-    // If external Atlas connection fails, attempt fallback to local MongoDB instance
-    if (config.MONGODB_URI.includes('mongodb+srv://') || config.MONGODB_URI.includes('cluster')) {
-      try {
-        console.warn(`[Database Warning] Atlas connection failed (${error.message}). Attempting fallback to local MongoDB...`);
-        const fallbackConn = await mongoose.connect('mongodb://127.0.0.1:27017/campusatlas', {
-          serverSelectionTimeoutMS: 3000,
-        });
-
-        dbStatus = {
-          status: 'connected',
-          host: fallbackConn.connection.host,
-          database: fallbackConn.connection.name,
-          lastError: null,
-        };
-
-        console.log(`[Database] Connected to local fallback MongoDB host: ${fallbackConn.connection.host} (${fallbackConn.connection.name})`);
-        return fallbackConn;
-      } catch (fallbackErr) {
-        // Fallback also failed, proceed with original error status
-      }
-    }
-
     dbStatus = {
       status: 'error',
       host: null,

@@ -3,13 +3,13 @@
 > Keep this file compact and factual. This is the source for agent-to-agent continuity. Update at the end of every milestone and before switching agents.
 
 ## Current state
-- **Last updated:** 2026-10-27 16:55 IST
-- **Current milestone:** 5 (Complete — Final Hardening & Submission Ready)
-- **Git branch / last commit:** master / 1423cee (feat(hardening): complete Milestone 5 UI quality, hardening, demo script & submission readiness)
-- **App status:** client working / API working / end-to-end working / single-service deployment verified
+- **Last updated:** 2026-10-27 18:15 IST
+- **Current milestone:** 5 (Complete + Targeted Release Safety Patch)
+- **Git branch / last commit:** master / pending release safety patch commit
+- **App status:** client working / API working / end-to-end working / single-service deployment verified / no automatic localhost failover
 
 ## Decisions locked
-- React + Vite + Tailwind; Express + Mongoose; MongoDB Atlas (with local 127.0.0.1:27017 fallback); official `@google/genai` SDK.
+- React + Vite + Tailwind; Express + Mongoose; MongoDB (strictly uses single configured MONGODB_URI target, no automatic local store switching); official `@google/genai` SDK.
 - Consistent ES modules (`"type": "module"`) across client and server.
 - Auth uses HttpOnly JWT cookie (`ca_auth_token`, SameSite=Lax/None, Secure in prod); moderator assignment/verification is server-controlled via `ADMIN_EMAILS`.
 - PDF upload limit 8 MiB; magic bytes validated (`%PDF-` / 0x255044462D) alongside MIME and extension.
@@ -28,6 +28,7 @@
   3. Hallucinated / unknown source IDs are stripped from the response and answer markers; they cannot produce source cards.
   4. If a model generates a non-abstaining answer without valid citations to candidate chunks, it is converted to an honest abstention (`NO_VALID_CITATIONS`).
 - Keyword fallback: Automatic graceful failover to deterministic keyword matching over eligible chunk text when embedding service is unavailable, with explicit mode labelling (`retrievalMode: 'keyword_fallback'`) and warning banner.
+- Database Connection Contract: Use strictly the single configured `MONGODB_URI`. Never silently attempt fallback or failover to `localhost` or `127.0.0.1` upon Atlas failure. On connection outage, the service maintains degraded mode: `/api/health` honestly reports database status as `'error'`/`'degraded'`, and all database-dependent API endpoints return structured HTTP 503 (`DATABASE_UNAVAILABLE`).
 - Centralized error handling returns uniform shape: `{ success: false, error: { message, code, details } }`.
 - Single-Service Production Deployment: Express natively serves built Vite assets from `client/dist` and handles SPA routing fallback for non-API requests (`get('*')`).
 
@@ -42,30 +43,34 @@
 ## Environment (names only; never put secrets here)
 - Required variables configured locally: yes (configured via local .env)
 - Missing required variables: none
-- MongoDB connectivity verified: yes (Atlas connection with automatic local `127.0.0.1:27017` failover verified in test suite)
+- MongoDB connectivity verified: yes (Single configured MONGODB_URI verified; zero automatic localhost failover; honest degraded mode with HTTP 503 on DB outage)
 - Gemini generation verified: yes (official `@google/genai` SDK verified live with `gemini-3.5-flash-lite`, grounded generation smoke test passed)
 - Gemini embeddings verified: yes (official `@google/genai` SDK verified live with `gemini-embedding-001` at 768 dimensions)
 
 ## Last completed milestone
-- **Implemented:** Milestone 5 (UI Quality, End-to-End Hardening, Deployment & Submission Readiness — F6):
-  - Resilient Database Connectivity: Added local MongoDB connection failover (`127.0.0.1:27017/campusatlas`) in `server/src/config/db.js` when external Atlas IP whitelist or TLS connection drops.
+- **Implemented:** Milestone 5 + Release Safety Patch (Single Configured MONGODB_URI Enforcement & Degraded Mode Hardening):
+  - Removed Automatic Local MongoDB Fallback: Eliminated silent connection fallback to `mongodb://127.0.0.1:27017/campusatlas` in `server/src/config/db.js`. MongoDB connects strictly to the single configured `MONGODB_URI`.
+  - Structured Degraded Mode: Added `server/src/middleware/requireDatabase.js` guarding all database-dependent routes (`/api/auth`, `/api/resources`, `/api/moderator`, `/api/users`, `/api/search`, `/api/ask`). When DB connection is down, endpoints return HTTP 503 with `{ success: false, error: { message: "...", code: "DATABASE_UNAVAILABLE" } }` instead of hanging or faking success. `/api/health` honestly surfaces database health.
+  - Dedicated DB Tests: Added `server/test/db.test.js` validating that connection failures never attempt connection to localhost, and verifying degraded mode 503 responses.
   - Route and Link Hardening: Added `/login` and `/register` route redirects in `client/src/App.jsx` pointing to `/auth`; normalized navigation links in `AskDocPage.jsx`.
   - Single-Service Express Verification: Tested and verified Express serving compiled Vite client SPA from `client/dist` with non-API wildcard fallback (`GET /ask` -> 200 HTML, `GET /api/health` -> 200 JSON).
-  - Evaluator Demo Script: Created `docs/DEMO_SCRIPT.md` providing a structured 3–5 minute evaluation guide covering user registration, PDF upload, background ingestion, semantic search, grounded Q&A with citations, honest abstention, and community moderation.
-  - Comprehensive README: Completely rewritten `README.md` covering architecture, feature capabilities F1–F6, environment variables table, quick start, test execution, demo walkthrough, and deployment guide.
+  - Evaluator Demo Script: `docs/DEMO_SCRIPT.md` providing a structured 3–5 minute evaluation guide covering user registration, PDF upload, background ingestion, semantic search, grounded Q&A with citations, honest abstention, and community moderation.
+  - Comprehensive README: Documented architecture, feature capabilities F1–F6, environment variables table, quick start, test execution, demo walkthrough, and deployment guide.
   - Security Check: Confirmed `.env` is ignored by Git and untracked; verified `.env.example` contains only safe placeholders; confirmed no API keys or credentials are committed.
 - **Files changed (key paths only):**
   - `server/src/config/db.js`
-  - `client/src/App.jsx`
-  - `client/src/pages/AskDocPage.jsx`
-  - `README.md`
-  - `docs/DEMO_SCRIPT.md` (new)
+  - `server/src/middleware/requireDatabase.js` (new)
+  - `server/src/app.js`
+  - `server/test/db.test.js` (new)
+  - `server/test/core.test.js`
+  - `server/test/ingestion.test.js`
+  - `server/test/ask.test.js`
   - `docs/AGENT_HANDOFF.md`
 - **Validation run + result:**
-  - Automated test suite (`npm --prefix server test`): 23 tests passed, 0 failed across F1, F2, F3, F4, and F5 (10.47s).
-  - Client production build (`npm --prefix client run build`): Vite build passed in 5.48s with 0 errors.
+  - Automated test suite (`npm --prefix server test`): 25 tests passed, 0 failed across DB safety, F1, F2, F3, F4, and F5 (32.69s).
+  - Client production build (`npm --prefix client run build`): Vite build passed in 5.19s with 0 errors.
   - Single-service local smoke test: Verified Express serving `client/dist` and SPA routing on port 5002.
   - Live Gemini generation: Verified live grounded answer synthesis with `gemini-3.5-flash-lite`.
 - **Known issues / accepted limitations:**
   - Scan limit: In-memory cosine scan limit bounded to 1,000 candidate chunks for initial demo corpus before Atlas Vector Search migration.
-  - Cloud deployment: Single-service production architecture is verified locally and ready for PaaS (Render, Railway, Fly.io); live public cloud deployment requires hosting account credentials which are not provided in this environment.
+  - Cloud deployment: Single-service production architecture is verified locally and ready for PaaS (Render, Railway, Fly.io); live public cloud deployment has not yet been performed and requires hosting account credentials.

@@ -14,6 +14,7 @@ import moderatorRoutes from './routes/moderator.js';
 import userRoutes from './routes/users.js';
 import searchRoutes from './routes/search.js';
 import askRoutes from './routes/ask.js';
+import { requireDatabase } from './middleware/requireDatabase.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -46,12 +47,12 @@ app.use(cookieParser());
 
 // API Routes
 app.use('/api/health', healthRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/resources', resourceRoutes);
-app.use('/api/moderator', moderatorRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/search', searchRoutes);
-app.use('/api/ask', askRoutes);
+app.use('/api/auth', requireDatabase, authRoutes);
+app.use('/api/resources', requireDatabase, resourceRoutes);
+app.use('/api/moderator', requireDatabase, moderatorRoutes);
+app.use('/api/users', requireDatabase, userRoutes);
+app.use('/api/search', requireDatabase, searchRoutes);
+app.use('/api/ask', requireDatabase, askRoutes);
 
 // Root API Welcome / Baseline
 app.get('/api', (req, res) => {
