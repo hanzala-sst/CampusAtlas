@@ -3,10 +3,10 @@
 > Keep this file compact and factual. This is the source for agent-to-agent continuity. Update at the end of every milestone and before switching agents.
 
 ## Current state
-- **Last updated:** 2026-10-27 20:45 IST
-- **Current milestone:** 5 (Complete + Targeted Release Safety Patch + Render Build Fix + Ingestion fileData Fix)
-- **Git branch / last commit:** master / 87d30b1 (fix(ingestion): validate non-empty fileData and use atomic updates to prevent required-field validation failures)
-- **App status:** client working / API working / end-to-end working / single-service deployment verified / no automatic localhost failover / atomic status updates safe against unselected fileData validation
+- **Last updated:** 2026-10-27 21:05 IST
+- **Current milestone:** 5 (Complete + Targeted Release Safety Patch + Render Build Fix + Ingestion fileData Fix + Live Ingestion Polling)
+- **Git branch / last commit:** master / 7be8e4d (feat(ui): add live ingestion status polling for resource detail and catalog)
+- **App status:** client working / API working / end-to-end working / single-service deployment verified / no automatic localhost failover / atomic status updates / automatic frontend live ingestion status refresh
 
 ## Decisions locked
 - React + Vite + Tailwind; Express + Mongoose; MongoDB (strictly uses single configured MONGODB_URI target, no automatic local store switching); official `@google/genai` SDK.
@@ -14,6 +14,7 @@
 - Auth uses HttpOnly JWT cookie (`ca_auth_token`, SameSite=Lax/None, Secure in prod); moderator assignment/verification is server-controlled via `ADMIN_EMAILS`.
 - PDF upload limit 8 MiB; magic bytes validated (`%PDF-` / 0x255044462D) alongside MIME and extension.
 - Bounded BSON storage for PDF file bytes in MongoDB (`fileData` excluded by default via `select: false` from queries, lists, and detail API JSON; explicitly selected with `.select('+fileData')` only where raw bytes are required; status and metadata updates use atomic `findByIdAndUpdate` to prevent triggering schema validation on unselected `fileData`).
+- Live Ingestion Polling: `ResourceDetailPage` polls the single resource at 2.5s intervals while `ingestionStatus` is `'queued'` or `'processing'`; stops immediately on terminal `'ready'` or `'failed'` or on unmount. `LibraryPage` polls standard catalog list at 3s intervals only while at least one displayed resource is non-terminal, stopping as soon as all are ready/failed; pauses polling when tab is hidden (`document.hidden`) and guards against overlapping requests.
 - PDF extraction: `unpdf` parses page-by-page returning 1-based page numbers; non-extractable / image-only PDFs fail with clear explanation.
 - Chunking: deterministic bounded chunks (~600 chars, ~120 char overlap) generated strictly per page so no chunk claims text from another page.
 - Embedding model + dimension: `gemini-embedding-001` with 768 dimensions (normalized vectors with cosine similarity).
@@ -48,22 +49,22 @@
 - Gemini embeddings verified: yes (official `@google/genai` SDK verified live with `gemini-embedding-001` at 768 dimensions)
 
 ## Last completed milestone
-- **Implemented:** Milestone 5 + Release Safety Patch + Render Deployment Build Fix + Ingestion fileData Fix:
-  - Ingestion fileData Fix: Resolved "Extraction failed: Resource validation failed: fileData: File data buffer is required".
-    - Root cause: Document saves (`resource.save()`) in ingestion (`processIngestion`), retry route (`POST /:id/retry`), edit route (`PUT /:id`), vote route (`POST /:id/vote`), and moderator actions (`/verify`, `/unverify`, `/archive`) called `.save()` on partially selected documents where `fileData` was omitted by schema default (`select: false`), triggering Mongoose full document validation error on the required `fileData` buffer.
-    - Fix: In `server/src/services/ingestionService.js`, explicitly validated that `fileData` is a non-empty `Buffer` or `Uint8Array` before extraction, and replaced `.save()` with atomic `findByIdAndUpdate` for status transitions (`processing`, `ready`). Replaced `.save()` with atomic `findByIdAndUpdate` in retry, metadata update, vote, and moderator routes. Preserved `fileData: { select: false }` schema default so PDF bytes are never exposed in lists or detail API JSON.
-  - Render Deployment Fix: Updated root `install:all` script in `package.json` to `npm install && npm --prefix server install && npm --prefix client install --include=dev`, preventing `sh: 1: vite: not found` on Render.
-  - Removed Automatic Local MongoDB Fallback: Eliminated silent connection fallback to `mongodb://127.0.0.1:27017/campusatlas` in `server/src/config/db.js`.
-  - Structured Degraded Mode: Guarded all database-dependent routes with `requireDatabase` returning structured HTTP 503 (`DATABASE_UNAVAILABLE`).
-  - Automated Regression Tests: Created `server/test/ingestionFileData.test.js` validating schema projection (`select: false`), required buffer validation, atomic status updates without validation errors, and retry idempotency.
+- **Implemented:** Milestone 5 + Release Safety Patch + Render Deployment Build Fix + Ingestion fileData Fix + Live Ingestion Polling:
+  - Live Ingestion Status Polling:
+    - `ResourceDetailPage.jsx`: Added a targeted `useEffect` that periodically (every 2.5s) polls the resource detail endpoint while `ingestionStatus` is `'queued'` or `'processing'`. As soon as status becomes `'ready'` or `'failed'`, or when component unmounts, polling terminates cleanly. Overlapping requests are guarded by an `isFetching` flag, unmount leaks are prevented via `isMounted`, and polling is paused when the tab is hidden (`document.hidden`).
+    - Immediate Retry Feedback: Updated `handleRetryIngestion` to immediately set state to `ingestionStatus: 'queued'`, seamlessly engaging the polling effect without waiting or requiring page reload.
+    - `LibraryPage.jsx`: Added catalog list polling (every 3s) engaged strictly when at least one displayed resource has a non-terminal status (`queued` or `processing`). Polling terminates automatically once all resources reach terminal states (`ready` or `failed`).
+  - Ingestion fileData Fix: Resolved "Extraction failed: Resource validation failed: fileData: File data buffer is required" by validating `fileData` buffer and switching status/metadata mutations to atomic `findByIdAndUpdate`.
+  - Render Deployment Fix: Set `install:all` to run `npm --prefix client install --include=dev`.
+  - Database Safety: Removed automatic localhost fallback; enforced single configured `MONGODB_URI`.
 - **Files changed (key paths only):**
-  - `server/src/services/ingestionService.js`
-  - `server/src/routes/resources.js`
-  - `server/src/routes/moderator.js`
-  - `server/test/ingestionFileData.test.js` (new)
+  - `client/src/pages/ResourceDetailPage.jsx`
+  - `client/src/pages/LibraryPage.jsx`
   - `docs/AGENT_HANDOFF.md`
 - **Validation run + result:**
-  - Automated test suite (`npm --prefix server test`): 27 tests executed (8 passed offline/unit tests including schema projection/validation regression, DB configuration safety, degraded health, 404 handler, PDF extraction, cosine similarity; 19 tests honestly skipped because MongoDB Atlas cluster is unreachable from this IP via SSL alert 80).
-  - Client production build (`npm run build`): Vite build passed in 7.53s with 0 errors (`dist/index.html`, `dist/assets/`).
-- **Post-Deploy Action for User:**
-  - After deploying this fix to Render, open the deployed application, navigate to the previously failed resource detail page, and click "Retry Ingestion" (or trigger `POST /api/resources/:id/retry`). The resource will transition from `failed` to `queued` -> `processing` -> `ready` without Mongoose validation errors.
+  - Automated test suite (`npm --prefix server test`): 27 tests executed (8 passed offline/unit tests; 19 tests honestly skipped due to external Atlas IP SSL connection restriction).
+  - Client production build (`npm run build`): Vite v6.4.5 built bundle in 3.23s with 0 errors (`dist/index.html`, `dist/assets/`).
+- **Post-Deploy Verification Procedure for User:**
+  1. Upload a PDF from `/upload`. On redirect to the resource detail page, the status badge automatically shows "Ingestion: queued" -> "Ingestion: processing" -> "Ingestion: ready" within seconds without refreshing.
+  2. For a failed resource, click "Retry Ingestion": the badge immediately flips to "Queued", then advances to "Ready" without page reload.
+  3. In `/library`, cards with "Indexing..." or "Queued" badges automatically refresh to "Indexed" once completed.

@@ -112,6 +112,42 @@ export default function ResourceDetailPage() {
     fetchComments();
   }, [id]);
 
+  // Live ingestion status polling: automatically poll while document is queued or processing
+  useEffect(() => {
+    const isPending = resource && ['queued', 'processing'].includes(resource.ingestionStatus);
+    if (!isPending) return;
+
+    let isMounted = true;
+    let isFetching = false;
+
+    const intervalId = setInterval(async () => {
+      if (document.hidden || isFetching || !isMounted) return;
+
+      isFetching = true;
+      try {
+        const data = await api.resources.get(id);
+        if (isMounted && data?.success && data?.resource) {
+          setResource((prev) => ({
+            ...prev,
+            ...data.resource,
+          }));
+          if (typeof data.resource.voteScore === 'number') {
+            setVoteScore(data.resource.voteScore);
+          }
+        }
+      } catch (err) {
+        console.warn('[ResourceDetailPage] Live status polling notice:', err.message);
+      } finally {
+        isFetching = false;
+      }
+    }, 2500);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [id, resource?.ingestionStatus]);
+
   const handleVote = async (value) => {
     if (!user) {
       navigate('/auth', { state: { from: `/resources/${id}` } });
@@ -229,8 +265,11 @@ export default function ResourceDetailPage() {
       setRetryingIngestion(true);
       const data = await api.resources.retry(id);
       if (data?.success) {
-        setResource({ ...resource, ingestionStatus: 'queued', ingestionError: null });
-        setTimeout(() => fetchResource(), 2500);
+        setResource((prev) => ({
+          ...prev,
+          ingestionStatus: 'queued',
+          ingestionError: null,
+        }));
       }
     } catch (err) {
       alert(err.message || 'Failed to retry ingestion');

@@ -97,6 +97,51 @@ export default function LibraryPage() {
     fetchResources();
   }, [activeSearch, courseCodeFilter, resourceType, semester, sortBy, page]);
 
+  // Live status polling: refresh catalog list while at least one displayed resource is queued or processing
+  useEffect(() => {
+    const hasPendingIngestions =
+      !activeSearch &&
+      resources.some((r) => ['queued', 'processing'].includes(r.ingestionStatus));
+
+    if (!hasPendingIngestions) return;
+
+    let isMounted = true;
+    let isFetching = false;
+
+    const intervalId = setInterval(async () => {
+      if (document.hidden || isFetching || !isMounted) return;
+
+      isFetching = true;
+      try {
+        const params = {
+          courseCode: courseCodeFilter,
+          resourceType,
+          semester,
+          sortBy,
+          page,
+          limit: 9,
+        };
+
+        const data = await api.resources.list(params);
+        if (isMounted && data?.success && Array.isArray(data.resources)) {
+          setResources(data.resources);
+          if (data.pagination) {
+            setPagination(data.pagination);
+          }
+        }
+      } catch (err) {
+        console.warn('[LibraryPage] Live status polling notice:', err.message);
+      } finally {
+        isFetching = false;
+      }
+    }, 3000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [activeSearch, courseCodeFilter, resourceType, semester, sortBy, page, resources]);
+
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     setPage(1);
