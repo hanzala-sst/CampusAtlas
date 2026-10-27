@@ -5,7 +5,7 @@
 ## Current state
 - **Last updated:** 2026-10-27 18:15 IST
 - **Current milestone:** 5 (Complete + Targeted Release Safety Patch)
-- **Git branch / last commit:** master / pending release safety patch commit
+- **Git branch / last commit:** master / de5d4b9 (fix(db): remove automatic local fallback and enforce single configured MONGODB_URI)
 - **App status:** client working / API working / end-to-end working / single-service deployment verified / no automatic localhost failover
 
 ## Decisions locked
