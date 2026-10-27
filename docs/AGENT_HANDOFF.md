@@ -5,7 +5,7 @@
 ## Current state
 - **Last updated:** 2026-10-27 14:45 IST
 - **Current milestone:** 4 (Complete)
-- **Git branch / last commit:** master / 1d50936 (Milestone 4 functional commit pending local commit)
+- **Git branch / last commit:** master / e6950e9 (feat(rag): complete Milestone 4 evidence-grounded Ask the Doc RAG (F4))
 - **App status:** client working / API working / end-to-end working
 
 ## Decisions locked
