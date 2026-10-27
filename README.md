@@ -186,6 +186,14 @@ To deploy CampusAtlas as a single web service:
 
 ---
 
+## 🎥 Demo Video
+
+Watch the CampusAtlas walkthrough to see the application in action, including PDF uploads, automatic document indexing, semantic search, AI-powered question answering with source citations, and community features.
+
+📺 **[Watch the CampusAtlas Demo](https://drive.google.com/file/d/1LN7umOOgGKsStTV9elbTUgQjvn1yZPz8/view?usp=sharing)**
+
+---
+
 ## Known Limitations & Bounds
 
 - **Scan Limit**: In-memory cosine similarity search scans up to 1,000 candidate chunks for demo corpus scale. For enterprise-scale libraries (>50,000 chunks), migration to MongoDB Atlas Vector Search indexing is recommended.
