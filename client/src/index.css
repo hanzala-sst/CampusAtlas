@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-800 antialiased selection:bg-brand-500 selection:text-white;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Glassmorphism and UI utility accents */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.gradient-brand {
+  background: linear-gradient(135deg, #026bc9 0%, #0c87eb 50%, #36a3f7 100%);
+}
+
+.gradient-subtle {
+  background: radial-gradient(circle at 50% 0%, rgba(12, 135, 235, 0.08) 0%, transparent 70%);
+}
