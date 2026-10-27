@@ -5,7 +5,7 @@
 ## Current state
 - **Last updated:** 2026-10-27 16:55 IST
 - **Current milestone:** 5 (Complete — Final Hardening & Submission Ready)
-- **Git branch / last commit:** master / pending commit
+- **Git branch / last commit:** master / 1423cee (feat(hardening): complete Milestone 5 UI quality, hardening, demo script & submission readiness)
 - **App status:** client working / API working / end-to-end working / single-service deployment verified
 
 ## Decisions locked
