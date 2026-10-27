@@ -8,6 +8,10 @@ import { fileURLToPath } from 'url';
 
 import { config } from './config/env.js';
 import healthRoutes from './routes/health.js';
+import authRoutes from './routes/auth.js';
+import resourceRoutes from './routes/resources.js';
+import moderatorRoutes from './routes/moderator.js';
+import userRoutes from './routes/users.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -38,8 +42,12 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-// API Health Check
+// API Routes
 app.use('/api/health', healthRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/resources', resourceRoutes);
+app.use('/api/moderator', moderatorRoutes);
+app.use('/api/users', userRoutes);
 
 // Root API Welcome / Baseline
 app.get('/api', (req, res) => {
