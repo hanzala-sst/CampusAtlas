@@ -87,13 +87,13 @@ before(async () => {
   baseUrl = `http://localhost:${port}`;
 
   // Create isolated test user
-  await User.deleteMany({ email: 'ingestion_tester@testcampusatlas.edu' });
+  await User.deleteMany({ email: 'ingestion_tester@testingestion.edu' });
   const registerRes = await fetch(`${baseUrl}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: 'Ingestion Tester',
-      email: 'ingestion_tester@testcampusatlas.edu',
+      email: 'ingestion_tester@testingestion.edu',
       password: 'password123',
     }),
   });
@@ -105,7 +105,7 @@ before(async () => {
 after(async () => {
   setGeminiClient(null); // Restore real client
   if (mongoose.connection.readyState === 1) {
-    await User.deleteMany({ email: 'ingestion_tester@testcampusatlas.edu' });
+    await User.deleteMany({ email: 'ingestion_tester@testingestion.edu' });
     if (testResourceId) {
       await Resource.findByIdAndDelete(testResourceId);
       await Chunk.deleteMany({ resourceId: testResourceId });

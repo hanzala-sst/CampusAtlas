@@ -13,6 +13,7 @@ import resourceRoutes from './routes/resources.js';
 import moderatorRoutes from './routes/moderator.js';
 import userRoutes from './routes/users.js';
 import searchRoutes from './routes/search.js';
+import askRoutes from './routes/ask.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -50,6 +51,7 @@ app.use('/api/resources', resourceRoutes);
 app.use('/api/moderator', moderatorRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/ask', askRoutes);
 
 // Root API Welcome / Baseline
 app.get('/api', (req, res) => {

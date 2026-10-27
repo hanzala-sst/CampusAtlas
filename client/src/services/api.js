@@ -93,4 +93,7 @@ export const api = {
     getContributions: () => apiRequest('/users/me/contributions', { method: 'GET' }),
     getReputation: (userId) => apiRequest(`/users/${userId}/reputation`, { method: 'GET' }),
   },
+  ask: {
+    query: (body) => apiRequest('/ask', { method: 'POST', body: JSON.stringify(body) }),
+  },
 };

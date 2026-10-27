@@ -25,6 +25,7 @@ import {
   ExternalLink,
   Loader2,
   RotateCw,
+  Sparkles,
 } from 'lucide-react';
 
 export default function ResourceDetailPage() {
@@ -366,6 +367,15 @@ export default function ResourceDetailPage() {
                 </span>
               </div>
               <div className="flex items-center gap-2">
+                {resource.ingestionStatus === 'ready' && (
+                  <Link
+                    to={`/ask?resourceId=${resource._id}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 shadow-xs transition-colors"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Ask this Doc
+                  </Link>
+                )}
                 <a
                   href={downloadUrl}
                   download={resource.fileName}

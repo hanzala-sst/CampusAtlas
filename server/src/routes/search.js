@@ -1,19 +1,7 @@
 import { Router } from 'express';
-import mongoose from 'mongoose';
-import { Resource } from '../models/Resource.js';
-import { Chunk } from '../models/Chunk.js';
-import { embedQuery, cosineSimilarity } from '../services/embeddingService.js';
-import { config } from '../config/env.js';
+import { retrieveRelevantChunks } from '../services/retrievalService.js';
 
 const router = Router();
-
-// Helper to escape regex special characters for keyword search
-function escapeRegex(text) {
-  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
-}
-
-// Bounded scan limit for initial in-memory similarity search over bounded demo corpus
-const BOUNDED_SCAN_CHUNK_LIMIT = 1000;
 
 // GET /api/search — Semantic retrieval with deterministic keyword fallback
 router.get('/', async (req, res, next) => {
@@ -50,147 +38,56 @@ router.get('/', async (req, res, next) => {
     const cleanQuery = q.trim();
     const limitNum = Math.min(30, Math.max(1, parseInt(limit, 10) || 10));
 
-    // Build resource eligibility filter:
-    // Only search resources that are ready and not archived
-    const resourceFilter = {
-      ingestionStatus: 'ready',
-      verificationStatus: { $ne: 'archived' },
-    };
+    const retrieval = await retrieveRelevantChunks({
+      query: cleanQuery,
+      courseCode,
+      semester,
+      resourceType,
+      resourceId,
+      limit: limitNum,
+    });
 
-    if (courseCode) {
-      resourceFilter.courseCode = courseCode.trim().toUpperCase();
-    }
-
-    if (semester) {
-      const semNum = parseInt(semester, 10);
-      if (!isNaN(semNum)) resourceFilter.semester = semNum;
-    }
-
-    if (resourceType) {
-      resourceFilter.resourceType = resourceType;
-    }
-
-    if (resourceId && mongoose.Types.ObjectId.isValid(resourceId)) {
-      resourceFilter._id = resourceId;
-    }
-
-    // Find eligible resources and project safe metadata only (never fileData)
-    const eligibleResources = await Resource.find(resourceFilter)
-      .select(
-        '_id title courseCode courseName subject semester academicYear resourceType verificationStatus pageCount voteScore upvoteCount'
-      )
-      .lean();
-
-    if (eligibleResources.length === 0) {
-      return res.json({
-        success: true,
-        mode: config.GEMINI_API_KEY ? 'semantic' : 'keyword_fallback',
-        query: cleanQuery,
-        totalMatches: 0,
-        results: [],
-        boundedScanLimit: BOUNDED_SCAN_CHUNK_LIMIT,
-      });
-    }
-
-    const resourcesMap = new Map(
-      eligibleResources.map((r) => [r._id.toString(), r])
-    );
-    const eligibleResourceIds = Array.from(resourcesMap.keys());
-
-    // Attempt Semantic Retrieval via Gemini embeddings
-    let semanticSucceeded = false;
-    let scoredChunks = [];
-
-    if (config.GEMINI_API_KEY) {
-      try {
-        const queryVector = await embedQuery(cleanQuery);
-
-        if (Array.isArray(queryVector) && queryVector.length === config.GEMINI_EMBEDDING_DIMENSIONS) {
-          // Fetch chunks for eligible resources with embeddings included
-          const candidateChunks = await Chunk.find({
-            resourceId: { $in: eligibleResourceIds },
-          })
-            .select('+embedding text pageNumber chunkIndex resourceId')
-            .limit(BOUNDED_SCAN_CHUNK_LIMIT)
-            .lean();
-
-          for (const chunk of candidateChunks) {
-            const score = cosineSimilarity(queryVector, chunk.embedding);
-            if (score > 0.35) { // Relevance threshold
-              scoredChunks.push({
-                chunk,
-                score,
-              });
-            }
-          }
-
-          // Sort by similarity descending
-          scoredChunks.sort((a, b) => b.score - a.score);
-          semanticSucceeded = true;
-        }
-      } catch (embedErr) {
-        console.warn('[Search Notice] Semantic embedding retrieval unavailable, engaging keyword fallback:', embedErr.message);
-        semanticSucceeded = false;
-      }
-    }
-
-    // If semantic search succeeded, return ranked semantic results
-    if (semanticSucceeded) {
-      const topResults = scoredChunks.slice(0, limitNum);
-
+    if (retrieval.retrievalMode === 'semantic') {
       return res.json({
         success: true,
         mode: 'semantic',
         query: cleanQuery,
-        embeddingModel: config.GEMINI_EMBEDDING_MODEL,
-        embeddingDimensions: config.GEMINI_EMBEDDING_DIMENSIONS,
-        boundedScanLimit: BOUNDED_SCAN_CHUNK_LIMIT,
-        totalMatches: scoredChunks.length,
-        results: topResults.map((item) => ({
-          chunkId: item.chunk._id,
-          resourceId: item.chunk.resourceId,
-          resource: resourcesMap.get(item.chunk.resourceId.toString()) || null,
-          pageNumber: item.chunk.pageNumber,
-          chunkIndex: item.chunk.chunkIndex,
-          score: Math.round(item.score * 1000) / 1000,
-          excerpt:
-            item.chunk.text.length > 280
-              ? item.chunk.text.slice(0, 280) + '...'
-              : item.chunk.text,
-          fullText: item.chunk.text,
+        embeddingModel: retrieval.embeddingModel,
+        embeddingDimensions: retrieval.embeddingDimensions,
+        boundedScanLimit: retrieval.boundedScanLimit,
+        totalMatches: retrieval.totalMatches,
+        results: retrieval.candidateChunks.map((c) => ({
+          chunkId: c.chunkId,
+          resourceId: c.resourceId,
+          resource: c.resource,
+          pageNumber: c.pageNumber,
+          chunkIndex: c.chunkIndex,
+          score: c.score,
+          excerpt: c.excerpt,
+          fullText: c.fullText,
         })),
       });
     }
 
-    // Keyword Fallback Mode (deterministic regex matching across eligible chunk text)
-    const regexQuery = new RegExp(escapeRegex(cleanQuery), 'i');
-    const keywordChunks = await Chunk.find({
-      resourceId: { $in: eligibleResourceIds },
-      text: regexQuery,
-    })
-      .select('text pageNumber chunkIndex resourceId')
-      .limit(limitNum)
-      .lean();
-
+    // Keyword fallback response
     return res.json({
       success: true,
       mode: 'keyword_fallback',
       fallbackNotice:
+        retrieval.fallbackNotice ||
         'Semantic vector similarity is currently unavailable. Showing deterministic keyword matches instead.',
       query: cleanQuery,
-      totalMatches: keywordChunks.length,
-      results: keywordChunks.map((chunk) => ({
-        chunkId: chunk._id,
-        resourceId: chunk.resourceId,
-        resource: resourcesMap.get(chunk.resourceId.toString()) || null,
-        pageNumber: chunk.pageNumber,
-        chunkIndex: chunk.chunkIndex,
-        score: 1.0,
-        excerpt:
-          chunk.text.length > 280
-            ? chunk.text.slice(0, 280) + '...'
-            : chunk.text,
-        fullText: chunk.text,
+      totalMatches: retrieval.totalMatches,
+      boundedScanLimit: retrieval.boundedScanLimit,
+      results: retrieval.candidateChunks.map((c) => ({
+        chunkId: c.chunkId,
+        resourceId: c.resourceId,
+        resource: c.resource,
+        pageNumber: c.pageNumber,
+        chunkIndex: c.chunkIndex,
+        score: c.score,
+        excerpt: c.excerpt,
+        fullText: c.fullText,
       })),
     });
   } catch (err) {

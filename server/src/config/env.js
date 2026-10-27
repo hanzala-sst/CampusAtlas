@@ -28,7 +28,7 @@ export const config = {
   MONGODB_URI: process.env.MONGODB_URI || 'mongodb://localhost:27017/campusatlas',
   JWT_SECRET: process.env.JWT_SECRET || (isProduction ? '' : 'dev_campusatlas_jwt_secret_change_in_prod'),
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
-  GEMINI_GENERATION_MODEL: process.env.GEMINI_GENERATION_MODEL || 'gemini-2.5-flash',
+  GEMINI_GENERATION_MODEL: process.env.GEMINI_GENERATION_MODEL || 'gemini-3.5-flash-lite',
   GEMINI_EMBEDDING_MODEL: process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001',
   GEMINI_EMBEDDING_DIMENSIONS: parseInt(process.env.GEMINI_EMBEDDING_DIMENSIONS, 10) || 768,
   ADMIN_EMAILS,
