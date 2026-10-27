@@ -5,7 +5,7 @@
 ## Current state
 - **Last updated:** 2026-10-27 13:50 IST
 - **Current milestone:** 2 (Complete)
-- **Git branch / last commit:** master / 18186da (Working tree contains completed Milestone 2 implementation)
+- **Git branch / last commit:** master / 64cc46b (feat(core): complete Milestone 2 core product vertical slice (F1 + F2 + F5))
 - **App status:** client working / API working / end-to-end working
 
 ## Decisions locked
