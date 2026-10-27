@@ -5,7 +5,7 @@
 ## Current state
 - **Last updated:** 2026-10-27 14:20 IST
 - **Current milestone:** 3 (Complete)
-- **Git branch / last commit:** master / 0857830 (Milestone 3 implementation ready)
+- **Git branch / last commit:** master / 0cf95f4 (feat(rag): complete Milestone 3 page-aware PDF ingestion and semantic retrieval (F3))
 - **App status:** client working / API working / end-to-end working
 
 ## Decisions locked
