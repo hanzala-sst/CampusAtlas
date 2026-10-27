@@ -3,10 +3,10 @@
 > Keep this file compact and factual. This is the source for agent-to-agent continuity. Update at the end of every milestone and before switching agents.
 
 ## Current state
-- **Last updated:** 2026-10-27 18:15 IST
-- **Current milestone:** 5 (Complete + Targeted Release Safety Patch)
-- **Git branch / last commit:** master / de5d4b9 (fix(db): remove automatic local fallback and enforce single configured MONGODB_URI)
-- **App status:** client working / API working / end-to-end working / single-service deployment verified / no automatic localhost failover
+- **Last updated:** 2026-10-27 18:40 IST
+- **Current milestone:** 5 (Complete + Targeted Release Safety Patch + Render Build Fix)
+- **Git branch / last commit:** master / b397534 (fix(deploy): include dev dependencies during client installation on Render)
+- **App status:** client working / API working / end-to-end working / single-service deployment verified / no automatic localhost failover / Render install:all --include=dev verified locally
 
 ## Decisions locked
 - React + Vite + Tailwind; Express + Mongoose; MongoDB (strictly uses single configured MONGODB_URI target, no automatic local store switching); official `@google/genai` SDK.
@@ -48,9 +48,11 @@
 - Gemini embeddings verified: yes (official `@google/genai` SDK verified live with `gemini-embedding-001` at 768 dimensions)
 
 ## Last completed milestone
-- **Implemented:** Milestone 5 + Release Safety Patch (Single Configured MONGODB_URI Enforcement & Degraded Mode Hardening):
+- **Implemented:** Milestone 5 + Release Safety Patch + Render Deployment Build Fix:
+  - Render Deployment Fix: Updated root `install:all` script in `package.json` to `npm install && npm --prefix server install && npm --prefix client install --include=dev`. This guarantees Vite and frontend build tools are installed even when the deployment environment defaults to `NODE_ENV=production`, preventing `sh: 1: vite: not found` on Render.
+  - Kept Vite and frontend build tooling in `devDependencies` in `client/package.json` without modifying dependency tiers.
   - Removed Automatic Local MongoDB Fallback: Eliminated silent connection fallback to `mongodb://127.0.0.1:27017/campusatlas` in `server/src/config/db.js`. MongoDB connects strictly to the single configured `MONGODB_URI`.
-  - Structured Degraded Mode: Added `server/src/middleware/requireDatabase.js` guarding all database-dependent routes (`/api/auth`, `/api/resources`, `/api/moderator`, `/api/users`, `/api/search`, `/api/ask`). When DB connection is down, endpoints return HTTP 503 with `{ success: false, error: { message: "...", code: "DATABASE_UNAVAILABLE" } }` instead of hanging or faking success. `/api/health` honestly surfaces database health.
+  - Structured Degraded Mode: Added `server/src/middleware/requireDatabase.js` guarding all database-dependent routes (`/api/auth`, `/api/resources`, `/api/moderator`, `/api/users`, `/api/search`, `/api/ask`). When DB connection is down, endpoints return HTTP 503 with `{ success: false, error: { message: "...", code: "DATABASE_UNAVAILABLE" } }`. `/api/health` honestly surfaces database health.
   - Dedicated DB Tests: Added `server/test/db.test.js` validating that connection failures never attempt connection to localhost, and verifying degraded mode 503 responses.
   - Route and Link Hardening: Added `/login` and `/register` route redirects in `client/src/App.jsx` pointing to `/auth`; normalized navigation links in `AskDocPage.jsx`.
   - Single-Service Express Verification: Tested and verified Express serving compiled Vite client SPA from `client/dist` with non-API wildcard fallback (`GET /ask` -> 200 HTML, `GET /api/health` -> 200 JSON).
@@ -58,19 +60,14 @@
   - Comprehensive README: Documented architecture, feature capabilities F1–F6, environment variables table, quick start, test execution, demo walkthrough, and deployment guide.
   - Security Check: Confirmed `.env` is ignored by Git and untracked; verified `.env.example` contains only safe placeholders; confirmed no API keys or credentials are committed.
 - **Files changed (key paths only):**
-  - `server/src/config/db.js`
-  - `server/src/middleware/requireDatabase.js` (new)
-  - `server/src/app.js`
-  - `server/test/db.test.js` (new)
-  - `server/test/core.test.js`
-  - `server/test/ingestion.test.js`
-  - `server/test/ask.test.js`
+  - `package.json`
+  - `client/package-lock.json`
   - `docs/AGENT_HANDOFF.md`
 - **Validation run + result:**
-  - Automated test suite (`npm --prefix server test`): 25 tests passed, 0 failed across DB safety, F1, F2, F3, F4, and F5 (32.69s).
-  - Client production build (`npm --prefix client run build`): Vite build passed in 5.19s with 0 errors.
-  - Single-service local smoke test: Verified Express serving `client/dist` and SPA routing on port 5002.
-  - Live Gemini generation: Verified live grounded answer synthesis with `gemini-3.5-flash-lite`.
+  - `npm run install:all`: Completed successfully with `--include=dev` on client install.
+  - Client production build (`npm run build`): Vite v6.4.5 built bundle in 5.39s with 0 errors (`dist/index.html`, `dist/assets/`).
+  - Automated test suite (`npm --prefix server test`): 25 tests passed, 0 failed across DB safety, F1, F2, F3, F4, and F5 (15.11s).
+  - Vite CLI verification: Confirmed `vite` executable present and responsive (`vite/6.4.5`).
 - **Known issues / accepted limitations:**
   - Scan limit: In-memory cosine scan limit bounded to 1,000 candidate chunks for initial demo corpus before Atlas Vector Search migration.
-  - Cloud deployment: Single-service production architecture is verified locally and ready for PaaS (Render, Railway, Fly.io); live public cloud deployment has not yet been performed and requires hosting account credentials.
+  - Cloud deployment: Root install script fix verified locally; pending push to remote repository and subsequent Render build run to verify remote deployment success.
