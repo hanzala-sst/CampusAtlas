@@ -11,7 +11,11 @@ import {
   Shield, 
   Clock, 
   ExternalLink,
-  Layers
+  Layers,
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
+  RotateCw
 } from 'lucide-react';
 
 export default function ResourceCard({ resource, onVoteChange }) {
@@ -80,6 +84,39 @@ export default function ResourceCard({ resource, onVoteChange }) {
     }
   };
 
+  const getIngestionBadge = () => {
+    switch (resource.ingestionStatus) {
+      case 'ready':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+            Indexed {resource.pageCount ? `(${resource.pageCount}p)` : ''}
+          </span>
+        );
+      case 'processing':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 animate-pulse">
+            <Loader2 className="w-3 h-3 text-blue-600 animate-spin" />
+            Indexing...
+          </span>
+        );
+      case 'failed':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-red-700 bg-red-50 px-2 py-0.5 rounded-md border border-red-200" title={resource.ingestionError || 'Extraction failed'}>
+            <AlertCircle className="w-3 h-3 text-red-600" />
+            Index Failed
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+            <Clock className="w-3 h-3 text-amber-600" />
+            Queued
+          </span>
+        );
+    }
+  };
+
   const formatResourceType = (type) => {
     const map = {
       'lecture-notes': 'Lecture Notes',
@@ -113,7 +150,10 @@ export default function ResourceCard({ resource, onVoteChange }) {
               Sem {resource.semester}
             </span>
           </div>
-          <div>{getVerificationBadge()}</div>
+          <div className="flex items-center gap-1.5">
+            {getIngestionBadge()}
+            {getVerificationBadge()}
+          </div>
         </div>
 
         {/* Title & Description */}

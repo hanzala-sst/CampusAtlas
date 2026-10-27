@@ -23,6 +23,8 @@ import {
   CheckCircle2,
   X,
   ExternalLink,
+  Loader2,
+  RotateCw,
 } from 'lucide-react';
 
 export default function ResourceDetailPage() {
@@ -216,6 +218,23 @@ export default function ResourceDetailPage() {
       alert(err.message || 'Failed to update resource metadata');
     } finally {
       setSavingEdit(false);
+    }
+  };
+
+  const [retryingIngestion, setRetryingIngestion] = useState(false);
+
+  const handleRetryIngestion = async () => {
+    try {
+      setRetryingIngestion(true);
+      const data = await api.resources.retry(id);
+      if (data?.success) {
+        setResource({ ...resource, ingestionStatus: 'queued', ingestionError: null });
+        setTimeout(() => fetchResource(), 2500);
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to retry ingestion');
+    } finally {
+      setRetryingIngestion(false);
     }
   };
 
@@ -598,17 +617,76 @@ export default function ResourceDetailPage() {
             )}
           </div>
 
-          {/* Ingestion Pipeline Notice */}
-          <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-5">
-            <div className="flex items-start gap-2.5">
-              <Clock className="w-4 h-4 text-brand-600 shrink-0 mt-0.5" />
-              <div>
-                <span className="text-xs font-bold text-brand-900 uppercase tracking-wide">
-                  Ingestion Status: {resource.ingestionStatus}
-                </span>
+          {/* Real Ingestion Pipeline Status Card */}
+          <div className={`rounded-2xl p-5 border ${
+            resource.ingestionStatus === 'ready'
+              ? 'bg-emerald-50/70 border-emerald-200'
+              : resource.ingestionStatus === 'processing'
+              ? 'bg-blue-50/70 border-blue-200'
+              : resource.ingestionStatus === 'failed'
+              ? 'bg-red-50/70 border-red-200'
+              : 'bg-amber-50/70 border-amber-200'
+          }`}>
+            <div className="flex items-start gap-3">
+              {resource.ingestionStatus === 'ready' ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              ) : resource.ingestionStatus === 'processing' ? (
+                <Loader2 className="w-5 h-5 text-blue-600 shrink-0 mt-0.5 animate-spin" />
+              ) : resource.ingestionStatus === 'failed' ? (
+                <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+              ) : (
+                <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              )}
+
+              <div className="flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`text-xs font-bold uppercase tracking-wide ${
+                    resource.ingestionStatus === 'ready'
+                      ? 'text-emerald-900'
+                      : resource.ingestionStatus === 'processing'
+                      ? 'text-blue-900'
+                      : resource.ingestionStatus === 'failed'
+                      ? 'text-red-900'
+                      : 'text-amber-900'
+                  }`}>
+                    Ingestion: {resource.ingestionStatus}
+                  </span>
+
+                  {resource.pageCount > 0 && (
+                    <span className="text-[11px] font-semibold text-slate-600">
+                      {resource.pageCount} {resource.pageCount === 1 ? 'page' : 'pages'}
+                    </span>
+                  )}
+                </div>
+
                 <p className="mt-1 text-xs text-slate-600 leading-relaxed">
-                  Document file bytes are safely stored in bounded MongoDB storage. Full page-by-page text extraction and Gemini embeddings will be processed in Milestone 3.
+                  {resource.ingestionStatus === 'ready' ? (
+                    <>
+                      Document text extracted across {resource.pageCount || 1} pages and indexed into {resource.chunkCount || 'all'} semantic chunks using 768-dimensional Gemini embeddings.
+                    </>
+                  ) : resource.ingestionStatus === 'processing' ? (
+                    'Background worker is currently extracting text page-by-page and generating vector embeddings...'
+                  ) : resource.ingestionStatus === 'failed' ? (
+                    <>
+                      Extraction failed: {resource.ingestionError || 'Unsupported PDF structure or missing text layer.'}
+                    </>
+                  ) : (
+                    'Document file bytes are preserved in database storage and queued for background indexing.'
+                  )}
                 </p>
+
+                {resource.ingestionStatus === 'failed' && canManage && (
+                  <div className="mt-3">
+                    <button
+                      onClick={handleRetryIngestion}
+                      disabled={retryingIngestion}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-red-600 hover:bg-red-700 shadow-xs transition-colors disabled:opacity-50"
+                    >
+                      <RotateCw className={`w-3.5 h-3.5 ${retryingIngestion ? 'animate-spin' : ''}`} />
+                      {retryingIngestion ? 'Retrying Ingestion...' : 'Retry Ingestion'}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

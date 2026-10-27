@@ -1,6 +1,7 @@
 import app from './app.js';
 import { config, validateConfig } from './config/env.js';
 import { connectDB, disconnectDB } from './config/db.js';
+import { recoverPendingIngestions } from './services/ingestionService.js';
 
 async function startServer() {
   console.log('----------------------------------------------------');
@@ -21,7 +22,13 @@ async function startServer() {
   }
 
   // Attempt database connection (non-blocking for baseline health check)
-  await connectDB();
+  const conn = await connectDB();
+  if (conn) {
+    // Recover any pending/interrupted ingestions from previous restarts
+    recoverPendingIngestions().catch((e) =>
+      console.warn('[Ingestion Recovery] Could not run startup recovery:', e.message)
+    );
+  }
 
   // Start Express server
   const server = app.listen(config.PORT, () => {

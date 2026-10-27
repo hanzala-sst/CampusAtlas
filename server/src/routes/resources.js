@@ -2,11 +2,13 @@ import { Router } from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import { Resource } from '../models/Resource.js';
+import { Chunk } from '../models/Chunk.js';
 import { Vote } from '../models/Vote.js';
 import { Comment } from '../models/Comment.js';
 import { Report } from '../models/Report.js';
 import { requireAuth, optionalAuth } from '../middleware/auth.js';
 import { calculateUserReputation } from '../services/reputationService.js';
+import { queueIngestion, isResourceProcessing } from '../services/ingestionService.js';
 
 const router = Router();
 
@@ -117,6 +119,9 @@ router.post('/', requireAuth, upload.single('file'), async (req, res, next) => {
       ingestionStatus: 'queued', // Explicitly queued until Milestone 3 adds extraction
       verificationStatus: 'unverified',
     });
+
+    // Asynchronously trigger background page extraction, chunking, and embeddings
+    queueIngestion(resource._id);
 
     // Fetch created resource without fileData
     const cleanResource = await Resource.findById(resource._id).populate(
@@ -289,12 +294,15 @@ router.get('/:id', optionalAuth, async (req, res, next) => {
       uploaderReputation = await calculateUserReputation(resource.uploadedBy._id);
     }
 
+    const chunkCount = await Chunk.countDocuments({ resourceId: resource._id });
+
     res.json({
       success: true,
       resource: {
         ...resource,
         userVote,
         uploaderReputation,
+        chunkCount,
       },
     });
   } catch (err) {
@@ -501,8 +509,9 @@ router.delete('/:id', requireAuth, async (req, res, next) => {
     // Delete resource
     await Resource.findByIdAndDelete(resource._id);
 
-    // Cascading cleanups: votes, comments, reports
+    // Cascading cleanups: chunks, votes, comments, reports
     await Promise.all([
+      Chunk.deleteMany({ resourceId: resource._id }),
       Vote.deleteMany({ resourceId: resource._id }),
       Comment.deleteMany({ resourceId: resource._id }),
       Report.deleteMany({ resourceId: resource._id }),
@@ -511,6 +520,68 @@ router.delete('/:id', requireAuth, async (req, res, next) => {
     res.json({
       success: true,
       message: 'Resource and associated records deleted successfully.',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/resources/:id/retry — Retry failed document extraction and embedding
+router.post('/:id/retry', requireAuth, async (req, res, next) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Invalid resource ID', code: 'INVALID_ID' },
+      });
+    }
+
+    const resource = await Resource.findById(req.params.id);
+    if (!resource) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Resource not found', code: 'NOT_FOUND' },
+      });
+    }
+
+    const isOwner = resource.uploadedBy.toString() === req.user._id.toString();
+    const isModerator = req.user.role === 'moderator';
+
+    if (!isOwner && !isModerator) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: 'You do not have permission to retry ingestion for this resource.',
+          code: 'FORBIDDEN',
+        },
+      });
+    }
+
+    if (isResourceProcessing(resource._id) || resource.ingestionStatus === 'processing') {
+      return res.status(409).json({
+        success: false,
+        error: {
+          message: 'This document is already actively being processed.',
+          code: 'ACTIVE_INGESTION_IN_PROGRESS',
+        },
+      });
+    }
+
+    // Set status to queued and trigger ingestion worker
+    resource.ingestionStatus = 'queued';
+    resource.ingestionError = null;
+    await resource.save();
+
+    queueIngestion(resource._id);
+
+    res.json({
+      success: true,
+      message: 'Ingestion retry initiated in the background.',
+      resource: {
+        _id: resource._id,
+        title: resource.title,
+        ingestionStatus: 'queued',
+      },
     });
   } catch (err) {
     next(err);

@@ -63,6 +63,7 @@ export const api = {
     upload: (formData) => apiRequest('/resources', { method: 'POST', body: formData }),
     update: (id, body) => apiRequest(`/resources/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
     delete: (id) => apiRequest(`/resources/${id}`, { method: 'DELETE' }),
+    retry: (id) => apiRequest(`/resources/${id}/retry`, { method: 'POST' }),
     vote: (id, value) => apiRequest(`/resources/${id}/vote`, { method: 'POST', body: JSON.stringify({ value }) }),
     getComments: (id) => apiRequest(`/resources/${id}/comments`, { method: 'GET' }),
     addComment: (id, body) => apiRequest(`/resources/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),
@@ -70,6 +71,16 @@ export const api = {
     report: (id, body) => apiRequest(`/resources/${id}/report`, { method: 'POST', body: JSON.stringify(body) }),
     getPreviewUrl: (id) => `${BASE_URL}/resources/${id}/preview`,
     getDownloadUrl: (id) => `${BASE_URL}/resources/${id}/download`,
+  },
+  search: (params = {}) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, val]) => {
+      if (val !== undefined && val !== null && val !== '') {
+        searchParams.append(key, val);
+      }
+    });
+    const queryStr = searchParams.toString();
+    return apiRequest(`/search${queryStr ? `?${queryStr}` : ''}`, { method: 'GET' });
   },
   moderator: {
     getQueue: () => apiRequest('/moderator/queue', { method: 'GET' }),

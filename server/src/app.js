@@ -12,6 +12,7 @@ import authRoutes from './routes/auth.js';
 import resourceRoutes from './routes/resources.js';
 import moderatorRoutes from './routes/moderator.js';
 import userRoutes from './routes/users.js';
+import searchRoutes from './routes/search.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -48,6 +49,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/resources', resourceRoutes);
 app.use('/api/moderator', moderatorRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/search', searchRoutes);
 
 // Root API Welcome / Baseline
 app.get('/api', (req, res) => {
