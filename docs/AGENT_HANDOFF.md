@@ -3,20 +3,20 @@
 > Keep this file compact and factual. This is the source for agent-to-agent continuity. Update at the end of every milestone and before switching agents.
 
 ## Current state
-- **Last updated:** 2026-10-27 14:45 IST
-- **Current milestone:** 4 (Complete)
-- **Git branch / last commit:** master / e6950e9 (feat(rag): complete Milestone 4 evidence-grounded Ask the Doc RAG (F4))
-- **App status:** client working / API working / end-to-end working
+- **Last updated:** 2026-10-27 16:55 IST
+- **Current milestone:** 5 (Complete — Final Hardening & Submission Ready)
+- **Git branch / last commit:** master / pending commit
+- **App status:** client working / API working / end-to-end working / single-service deployment verified
 
 ## Decisions locked
-- React + Vite + Tailwind; Express + Mongoose; MongoDB Atlas; official `@google/genai` SDK.
+- React + Vite + Tailwind; Express + Mongoose; MongoDB Atlas (with local 127.0.0.1:27017 fallback); official `@google/genai` SDK.
 - Consistent ES modules (`"type": "module"`) across client and server.
 - Auth uses HttpOnly JWT cookie (`ca_auth_token`, SameSite=Lax/None, Secure in prod); moderator assignment/verification is server-controlled via `ADMIN_EMAILS`.
 - PDF upload limit 8 MiB; magic bytes validated (`%PDF-` / 0x255044462D) alongside MIME and extension.
 - Bounded BSON storage for PDF file bytes in MongoDB (fileData excluded by default from queries and lists).
 - PDF extraction: `unpdf` parses page-by-page returning 1-based page numbers; non-extractable / image-only PDFs fail with clear explanation.
 - Chunking: deterministic bounded chunks (~600 chars, ~120 char overlap) generated strictly per page so no chunk claims text from another page.
-- Embedding model + dimension used by this repo: `gemini-embedding-001` with 768 dimensions (normalized vectors with cosine similarity).
+- Embedding model + dimension: `gemini-embedding-001` with 768 dimensions (normalized vectors with cosine similarity).
 - Generation model: `gemini-3.5-flash-lite` with automatic fallback to `gemini-3.5-flash` if `gemini-2.5-flash` encounters a 404/503 from the Google GenAI provider.
 - Bounded scan limit: Initial in-memory cosine scan limit set to 1000 candidate chunks for demo corpus before Atlas Vector Search migration.
 - Ingestion state machine: `queued` → `processing` → `ready` or `failed`. Background worker with in-process lock (`activeIngestions` Set) and startup recovery.
@@ -29,6 +29,7 @@
   4. If a model generates a non-abstaining answer without valid citations to candidate chunks, it is converted to an honest abstention (`NO_VALID_CITATIONS`).
 - Keyword fallback: Automatic graceful failover to deterministic keyword matching over eligible chunk text when embedding service is unavailable, with explicit mode labelling (`retrievalMode: 'keyword_fallback'`) and warning banner.
 - Centralized error handling returns uniform shape: `{ success: false, error: { message, code, details } }`.
+- Single-Service Production Deployment: Express natively serves built Vite assets from `client/dist` and handles SPA routing fallback for non-API requests (`get('*')`).
 
 ## Feature contract status
 - [x] F1 Identity and permissions (register/login/logout/me, cookie, roles, ownership)
@@ -36,45 +37,35 @@
 - [x] F3 Ingestion and retrieval (page text, chunks, embeddings, retry, semantic search, keyword fallback, cleanup)
 - [x] F4 Ask the Doc (retrieval-grounded answers, actual sources/page excerpts, no-evidence abstention, citation validation, prompt injection protection)
 - [x] F5 Community (unique voting, comments, reports, moderator queue/verification, computed reputation)
-- [ ] F6 UI quality (responsive, all states, no decorative core controls — Milestone 5)
+- [x] F6 UI quality (responsive, all states, zero decorative controls, single-service deployment verified)
 
 ## Environment (names only; never put secrets here)
 - Required variables configured locally: yes (configured via local .env)
 - Missing required variables: none
-- MongoDB connectivity verified: yes (MongoDB Atlas connected and verified against test suite)
+- MongoDB connectivity verified: yes (Atlas connection with automatic local `127.0.0.1:27017` failover verified in test suite)
 - Gemini generation verified: yes (official `@google/genai` SDK verified live with `gemini-3.5-flash-lite`, grounded generation smoke test passed)
 - Gemini embeddings verified: yes (official `@google/genai` SDK verified live with `gemini-embedding-001` at 768 dimensions)
 
 ## Last completed milestone
-- **Implemented:** Milestone 4 (Evidence-Grounded "Ask the Doc" RAG — F4):
-  - Shared retrieval service (`server/src/services/retrievalService.js`) consolidating chunk filtering, resource eligibility (ready and not archived), bounded scan, Gemini embeddings, and deterministic keyword fallback.
-  - Search route refactored (`server/src/routes/search.js`) to consume shared retrieval without changing its API contract.
-  - Grounded answer generation service (`server/src/services/generationService.js`) using `@google/genai` with strict evidence-only instructions, prompt injection resistance, inline citation format `[S1]`, structured JSON schema, and multi-model fallback (`gemini-3.5-flash-lite` / `gemini-3.5-flash`).
-  - Server-side citation verification: candidate chunks mapped to server IDs; hallucinated IDs stripped; unsupported answers converted to abstentions; source cards built strictly from MongoDB Chunk and Resource records.
-  - Authenticated Q&A endpoint (`POST /api/ask`) in `server/src/routes/ask.js` mounted at `/api/ask` in `server/src/app.js`.
-  - Frontend Ask the Doc page (`client/src/pages/AskDocPage.jsx`): scope selector (All Library / Specific Document / Course Filters), question input with character counter, quick prompt chips, formatted inline citation badges, verified source cards with verbatim excerpts and links to documents, honest retrieval mode badge (semantic vs keyword fallback), honest abstention states, and loading skeletons.
-  - Resource detail integration (`client/src/pages/ResourceDetailPage.jsx`): direct "Ask this Doc" action button in PDF preview header linking to `/ask?resourceId=:id`.
-  - Client API service helper (`client/src/services/api.js`): added `api.ask.query(body)`.
+- **Implemented:** Milestone 5 (UI Quality, End-to-End Hardening, Deployment & Submission Readiness — F6):
+  - Resilient Database Connectivity: Added local MongoDB connection failover (`127.0.0.1:27017/campusatlas`) in `server/src/config/db.js` when external Atlas IP whitelist or TLS connection drops.
+  - Route and Link Hardening: Added `/login` and `/register` route redirects in `client/src/App.jsx` pointing to `/auth`; normalized navigation links in `AskDocPage.jsx`.
+  - Single-Service Express Verification: Tested and verified Express serving compiled Vite client SPA from `client/dist` with non-API wildcard fallback (`GET /ask` -> 200 HTML, `GET /api/health` -> 200 JSON).
+  - Evaluator Demo Script: Created `docs/DEMO_SCRIPT.md` providing a structured 3–5 minute evaluation guide covering user registration, PDF upload, background ingestion, semantic search, grounded Q&A with citations, honest abstention, and community moderation.
+  - Comprehensive README: Completely rewritten `README.md` covering architecture, feature capabilities F1–F6, environment variables table, quick start, test execution, demo walkthrough, and deployment guide.
+  - Security Check: Confirmed `.env` is ignored by Git and untracked; verified `.env.example` contains only safe placeholders; confirmed no API keys or credentials are committed.
 - **Files changed (key paths only):**
-  - `server/src/config/env.js`
-  - `server/src/services/retrievalService.js` (new)
-  - `server/src/services/generationService.js` (new)
-  - `server/src/routes/ask.js` (new)
-  - `server/src/routes/search.js`
-  - `server/src/app.js`
-  - `server/test/ask.test.js` (new)
-  - `client/src/services/api.js`
+  - `server/src/config/db.js`
+  - `client/src/App.jsx`
   - `client/src/pages/AskDocPage.jsx`
-  - `client/src/pages/ResourceDetailPage.jsx`
+  - `README.md`
+  - `docs/DEMO_SCRIPT.md` (new)
   - `docs/AGENT_HANDOFF.md`
 - **Validation run + result:**
-  - Automated test suite (`npm --prefix server test`): 23 tests passed, 0 failed across F1, F2, F3, F4, and F5 (10.65s).
-  - Mocked test suite: verified request validation (short/long/invalid ID), authentication enforcement (401), zero-evidence abstention without generation invocation, grounded response mapping to DB source cards, hallucinated source ID stripping, non-abstaining unsupported answer conversion to abstention, keyword fallback mode, malformed model output graceful abstention, and archived resource exclusion.
-  - Live smoke test: verified real `@google/genai` SDK generation call against sample academic chunk, yielding grounded answer with verified `[S1]` citation.
-  - Client production build (`npm --prefix client run build`): Vite build passed in 3.12s with 0 errors.
+  - Automated test suite (`npm --prefix server test`): 23 tests passed, 0 failed across F1, F2, F3, F4, and F5 (10.47s).
+  - Client production build (`npm --prefix client run build`): Vite build passed in 5.48s with 0 errors.
+  - Single-service local smoke test: Verified Express serving `client/dist` and SPA routing on port 5002.
+  - Live Gemini generation: Verified live grounded answer synthesis with `gemini-3.5-flash-lite`.
 - **Known issues / accepted limitations:**
-  - In-memory cosine scan bounded to 1,000 candidate chunks for initial demo corpus before Atlas Vector Search migration.
-  - Optional multi-turn conversational history is deferred to post-acceptance or future milestone, as core F4 study RAG is focused on single grounded questions with verified sources.
-
-## Immediate next task
-Milestone 5: F6 UI quality, end-to-end hardening, comprehensive deployment/docs/demo checklist, and project submission readiness.
+  - Scan limit: In-memory cosine scan limit bounded to 1,000 candidate chunks for initial demo corpus before Atlas Vector Search migration.
+  - Cloud deployment: Single-service production architecture is verified locally and ready for PaaS (Render, Railway, Fly.io); live public cloud deployment requires hosting account credentials which are not provided in this environment.

@@ -28,6 +28,8 @@ export default function App() {
               <Route path="/contributions" element={<ContributionsPage />} />
               <Route path="/moderator" element={<ModeratorPage />} />
               <Route path="/auth" element={<AuthPage />} />
+              <Route path="/login" element={<Navigate to="/auth" replace />} />
+              <Route path="/register" element={<Navigate to="/auth" replace />} />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </main>

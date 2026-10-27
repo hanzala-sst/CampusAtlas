@@ -158,7 +158,7 @@ export default function AskDocPage() {
             <span className="font-semibold">Sign in required:</span> You must be logged into CampusAtlas to query indexed course documents.
             <div className="mt-2">
               <Link
-                to="/login"
+                to="/auth"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-xs transition"
               >
                 Sign In to Ask
