@@ -439,31 +439,31 @@ router.patch('/:id', requireAuth, async (req, res, next) => {
       resourceType,
     } = req.body || {};
 
-    if (title) resource.title = title.trim();
-    if (description !== undefined) resource.description = description.trim();
-    if (courseCode) resource.courseCode = courseCode.trim().toUpperCase();
-    if (courseName) resource.courseName = courseName.trim();
-    if (subject) resource.subject = subject.trim();
+    const updateFields = {};
+    if (title) updateFields.title = title.trim();
+    if (description !== undefined) updateFields.description = description.trim();
+    if (courseCode) updateFields.courseCode = courseCode.trim().toUpperCase();
+    if (courseName) updateFields.courseName = courseName.trim();
+    if (subject) updateFields.subject = subject.trim();
     if (semester) {
       const semNum = parseInt(semester, 10);
-      if (!isNaN(semNum) && semNum >= 1 && semNum <= 10) resource.semester = semNum;
+      if (!isNaN(semNum) && semNum >= 1 && semNum <= 10) updateFields.semester = semNum;
     }
-    if (academicYear) resource.academicYear = academicYear.trim();
+    if (academicYear) updateFields.academicYear = academicYear.trim();
     if (
       resourceType &&
       ['lecture-notes', 'pyq', 'lab-manual', 'assignment', 'reference'].includes(
         resourceType
       )
     ) {
-      resource.resourceType = resourceType;
+      updateFields.resourceType = resourceType;
     }
 
-    await resource.save();
-
-    const updatedResource = await Resource.findById(resource._id).populate(
-      'uploadedBy',
-      'name role'
-    );
+    const updatedResource = await Resource.findByIdAndUpdate(
+      resource._id,
+      updateFields,
+      { new: true, runValidators: true }
+    ).populate('uploadedBy', 'name role');
 
     res.json({
       success: true,
@@ -567,10 +567,15 @@ router.post('/:id/retry', requireAuth, async (req, res, next) => {
       });
     }
 
-    // Set status to queued and trigger ingestion worker
-    resource.ingestionStatus = 'queued';
-    resource.ingestionError = null;
-    await resource.save();
+    // Set status to queued atomically without saving a partially selected document
+    const updated = await Resource.findByIdAndUpdate(
+      resource._id,
+      {
+        ingestionStatus: 'queued',
+        ingestionError: null,
+      },
+      { new: true }
+    );
 
     queueIngestion(resource._id);
 
@@ -578,8 +583,8 @@ router.post('/:id/retry', requireAuth, async (req, res, next) => {
       success: true,
       message: 'Ingestion retry initiated in the background.',
       resource: {
-        _id: resource._id,
-        title: resource.title,
+        _id: updated._id,
+        title: updated.title,
         ingestionStatus: 'queued',
       },
     });
@@ -642,10 +647,11 @@ router.post('/:id/vote', requireAuth, async (req, res, next) => {
 
     const voteScore = upvoteCount - downvoteCount;
 
-    resource.upvoteCount = upvoteCount;
-    resource.downvoteCount = downvoteCount;
-    resource.voteScore = voteScore;
-    await resource.save();
+    await Resource.findByIdAndUpdate(resourceId, {
+      upvoteCount,
+      downvoteCount,
+      voteScore,
+    });
 
     res.json({
       success: true,

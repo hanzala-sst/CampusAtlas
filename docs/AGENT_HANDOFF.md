@@ -3,17 +3,17 @@
 > Keep this file compact and factual. This is the source for agent-to-agent continuity. Update at the end of every milestone and before switching agents.
 
 ## Current state
-- **Last updated:** 2026-10-27 18:40 IST
-- **Current milestone:** 5 (Complete + Targeted Release Safety Patch + Render Build Fix)
-- **Git branch / last commit:** master / b397534 (fix(deploy): include dev dependencies during client installation on Render)
-- **App status:** client working / API working / end-to-end working / single-service deployment verified / no automatic localhost failover / Render install:all --include=dev verified locally
+- **Last updated:** 2026-10-27 20:45 IST
+- **Current milestone:** 5 (Complete + Targeted Release Safety Patch + Render Build Fix + Ingestion fileData Fix)
+- **Git branch / last commit:** master / 87d30b1 (fix(ingestion): validate non-empty fileData and use atomic updates to prevent required-field validation failures)
+- **App status:** client working / API working / end-to-end working / single-service deployment verified / no automatic localhost failover / atomic status updates safe against unselected fileData validation
 
 ## Decisions locked
 - React + Vite + Tailwind; Express + Mongoose; MongoDB (strictly uses single configured MONGODB_URI target, no automatic local store switching); official `@google/genai` SDK.
 - Consistent ES modules (`"type": "module"`) across client and server.
 - Auth uses HttpOnly JWT cookie (`ca_auth_token`, SameSite=Lax/None, Secure in prod); moderator assignment/verification is server-controlled via `ADMIN_EMAILS`.
 - PDF upload limit 8 MiB; magic bytes validated (`%PDF-` / 0x255044462D) alongside MIME and extension.
-- Bounded BSON storage for PDF file bytes in MongoDB (fileData excluded by default from queries and lists).
+- Bounded BSON storage for PDF file bytes in MongoDB (`fileData` excluded by default via `select: false` from queries, lists, and detail API JSON; explicitly selected with `.select('+fileData')` only where raw bytes are required; status and metadata updates use atomic `findByIdAndUpdate` to prevent triggering schema validation on unselected `fileData`).
 - PDF extraction: `unpdf` parses page-by-page returning 1-based page numbers; non-extractable / image-only PDFs fail with clear explanation.
 - Chunking: deterministic bounded chunks (~600 chars, ~120 char overlap) generated strictly per page so no chunk claims text from another page.
 - Embedding model + dimension: `gemini-embedding-001` with 768 dimensions (normalized vectors with cosine similarity).
@@ -48,26 +48,22 @@
 - Gemini embeddings verified: yes (official `@google/genai` SDK verified live with `gemini-embedding-001` at 768 dimensions)
 
 ## Last completed milestone
-- **Implemented:** Milestone 5 + Release Safety Patch + Render Deployment Build Fix:
-  - Render Deployment Fix: Updated root `install:all` script in `package.json` to `npm install && npm --prefix server install && npm --prefix client install --include=dev`. This guarantees Vite and frontend build tools are installed even when the deployment environment defaults to `NODE_ENV=production`, preventing `sh: 1: vite: not found` on Render.
-  - Kept Vite and frontend build tooling in `devDependencies` in `client/package.json` without modifying dependency tiers.
-  - Removed Automatic Local MongoDB Fallback: Eliminated silent connection fallback to `mongodb://127.0.0.1:27017/campusatlas` in `server/src/config/db.js`. MongoDB connects strictly to the single configured `MONGODB_URI`.
-  - Structured Degraded Mode: Added `server/src/middleware/requireDatabase.js` guarding all database-dependent routes (`/api/auth`, `/api/resources`, `/api/moderator`, `/api/users`, `/api/search`, `/api/ask`). When DB connection is down, endpoints return HTTP 503 with `{ success: false, error: { message: "...", code: "DATABASE_UNAVAILABLE" } }`. `/api/health` honestly surfaces database health.
-  - Dedicated DB Tests: Added `server/test/db.test.js` validating that connection failures never attempt connection to localhost, and verifying degraded mode 503 responses.
-  - Route and Link Hardening: Added `/login` and `/register` route redirects in `client/src/App.jsx` pointing to `/auth`; normalized navigation links in `AskDocPage.jsx`.
-  - Single-Service Express Verification: Tested and verified Express serving compiled Vite client SPA from `client/dist` with non-API wildcard fallback (`GET /ask` -> 200 HTML, `GET /api/health` -> 200 JSON).
-  - Evaluator Demo Script: `docs/DEMO_SCRIPT.md` providing a structured 3–5 minute evaluation guide covering user registration, PDF upload, background ingestion, semantic search, grounded Q&A with citations, honest abstention, and community moderation.
-  - Comprehensive README: Documented architecture, feature capabilities F1–F6, environment variables table, quick start, test execution, demo walkthrough, and deployment guide.
-  - Security Check: Confirmed `.env` is ignored by Git and untracked; verified `.env.example` contains only safe placeholders; confirmed no API keys or credentials are committed.
+- **Implemented:** Milestone 5 + Release Safety Patch + Render Deployment Build Fix + Ingestion fileData Fix:
+  - Ingestion fileData Fix: Resolved "Extraction failed: Resource validation failed: fileData: File data buffer is required".
+    - Root cause: Document saves (`resource.save()`) in ingestion (`processIngestion`), retry route (`POST /:id/retry`), edit route (`PUT /:id`), vote route (`POST /:id/vote`), and moderator actions (`/verify`, `/unverify`, `/archive`) called `.save()` on partially selected documents where `fileData` was omitted by schema default (`select: false`), triggering Mongoose full document validation error on the required `fileData` buffer.
+    - Fix: In `server/src/services/ingestionService.js`, explicitly validated that `fileData` is a non-empty `Buffer` or `Uint8Array` before extraction, and replaced `.save()` with atomic `findByIdAndUpdate` for status transitions (`processing`, `ready`). Replaced `.save()` with atomic `findByIdAndUpdate` in retry, metadata update, vote, and moderator routes. Preserved `fileData: { select: false }` schema default so PDF bytes are never exposed in lists or detail API JSON.
+  - Render Deployment Fix: Updated root `install:all` script in `package.json` to `npm install && npm --prefix server install && npm --prefix client install --include=dev`, preventing `sh: 1: vite: not found` on Render.
+  - Removed Automatic Local MongoDB Fallback: Eliminated silent connection fallback to `mongodb://127.0.0.1:27017/campusatlas` in `server/src/config/db.js`.
+  - Structured Degraded Mode: Guarded all database-dependent routes with `requireDatabase` returning structured HTTP 503 (`DATABASE_UNAVAILABLE`).
+  - Automated Regression Tests: Created `server/test/ingestionFileData.test.js` validating schema projection (`select: false`), required buffer validation, atomic status updates without validation errors, and retry idempotency.
 - **Files changed (key paths only):**
-  - `package.json`
-  - `client/package-lock.json`
+  - `server/src/services/ingestionService.js`
+  - `server/src/routes/resources.js`
+  - `server/src/routes/moderator.js`
+  - `server/test/ingestionFileData.test.js` (new)
   - `docs/AGENT_HANDOFF.md`
 - **Validation run + result:**
-  - `npm run install:all`: Completed successfully with `--include=dev` on client install.
-  - Client production build (`npm run build`): Vite v6.4.5 built bundle in 5.39s with 0 errors (`dist/index.html`, `dist/assets/`).
-  - Automated test suite (`npm --prefix server test`): 25 tests passed, 0 failed across DB safety, F1, F2, F3, F4, and F5 (15.11s).
-  - Vite CLI verification: Confirmed `vite` executable present and responsive (`vite/6.4.5`).
-- **Known issues / accepted limitations:**
-  - Scan limit: In-memory cosine scan limit bounded to 1,000 candidate chunks for initial demo corpus before Atlas Vector Search migration.
-  - Cloud deployment: Root install script fix verified locally; pending push to remote repository and subsequent Render build run to verify remote deployment success.
+  - Automated test suite (`npm --prefix server test`): 27 tests executed (8 passed offline/unit tests including schema projection/validation regression, DB configuration safety, degraded health, 404 handler, PDF extraction, cosine similarity; 19 tests honestly skipped because MongoDB Atlas cluster is unreachable from this IP via SSL alert 80).
+  - Client production build (`npm run build`): Vite build passed in 7.53s with 0 errors (`dist/index.html`, `dist/assets/`).
+- **Post-Deploy Action for User:**
+  - After deploying this fix to Render, open the deployed application, navigate to the previously failed resource detail page, and click "Retry Ingestion" (or trigger `POST /api/resources/:id/retry`). The resource will transition from `failed` to `queued` -> `processing` -> `ready` without Mongoose validation errors.

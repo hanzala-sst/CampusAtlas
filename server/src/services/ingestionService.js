@@ -34,14 +34,25 @@ export async function processIngestion(resourceId) {
 
   try {
     const resource = await Resource.findById(resourceId).select('+fileData');
-    if (!resource || !resource.fileData) {
-      throw new Error('Resource or PDF binary data was not found.');
+    if (!resource) {
+      throw new Error('Resource not found.');
     }
 
-    // Update status to processing
-    resource.ingestionStatus = 'processing';
-    resource.ingestionError = null;
-    await resource.save();
+    // Validate that fileData is a Buffer/Uint8Array with nonzero length before extraction
+    const hasValidFileData =
+      resource.fileData &&
+      (Buffer.isBuffer(resource.fileData) || resource.fileData instanceof Uint8Array) &&
+      resource.fileData.length > 0;
+
+    if (!hasValidFileData) {
+      throw new Error('Resource PDF binary data is missing or empty.');
+    }
+
+    // Update status to processing atomically (avoids triggering schema validation on unselected fields)
+    await Resource.findByIdAndUpdate(resourceId, {
+      ingestionStatus: 'processing',
+      ingestionError: null,
+    });
 
     console.log(`[Ingestion] Started processing document "${resource.title}" (${resourceIdStr})...`);
 
@@ -54,7 +65,6 @@ export async function processIngestion(resourceId) {
 
     // Step 1: Extract pages
     const { totalPages, pages } = await extractPagesFromPdf(resource.fileData);
-    resource.pageCount = totalPages;
 
     // Step 2: Chunk pages with 1-based page numbers and boundaries
     const chunks = chunkPages(pages, resource._id);
@@ -68,10 +78,12 @@ export async function processIngestion(resourceId) {
     await Chunk.deleteMany({ resourceId: resource._id });
     await Chunk.insertMany(embeddedChunks);
 
-    // Step 5: Mark ready
-    resource.ingestionStatus = 'ready';
-    resource.ingestionError = null;
-    await resource.save();
+    // Step 5: Mark ready atomically with extracted pageCount
+    await Resource.findByIdAndUpdate(resourceId, {
+      pageCount: totalPages,
+      ingestionStatus: 'ready',
+      ingestionError: null,
+    });
 
     console.log(`[Ingestion] Resource "${resource.title}" (${resourceIdStr}) successfully ingested and ready for retrieval.`);
     return true;

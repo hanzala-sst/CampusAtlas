@@ -68,11 +68,12 @@ router.patch('/resources/:id/verify', async (req, res, next) => {
       });
     }
 
-    resource.verificationStatus = 'verified';
-    resource.verifiedBy = req.user._id;
-    resource.verifiedAt = new Date();
-    resource.verificationNote = note ? note.trim() : 'Verified by moderator';
-    await resource.save();
+    await Resource.findByIdAndUpdate(resource._id, {
+      verificationStatus: 'verified',
+      verifiedBy: req.user._id,
+      verifiedAt: new Date(),
+      verificationNote: note ? note.trim() : 'Verified by moderator',
+    });
 
     const updated = await Resource.findById(resource._id)
       .populate('uploadedBy', 'name role')
@@ -106,11 +107,12 @@ router.patch('/resources/:id/unverify', async (req, res, next) => {
       });
     }
 
-    resource.verificationStatus = 'unverified';
-    resource.verifiedBy = null;
-    resource.verifiedAt = null;
-    resource.verificationNote = null;
-    await resource.save();
+    await Resource.findByIdAndUpdate(resource._id, {
+      verificationStatus: 'unverified',
+      verifiedBy: null,
+      verifiedAt: null,
+      verificationNote: null,
+    });
 
     const updated = await Resource.findById(resource._id).populate(
       'uploadedBy',
@@ -145,18 +147,25 @@ router.patch('/resources/:id/archive', async (req, res, next) => {
       });
     }
 
-    resource.verificationStatus = 'archived';
-    resource.verifiedBy = req.user._id;
-    resource.verifiedAt = new Date();
-    resource.verificationNote = req.body?.note
+    const verificationNote = req.body?.note
       ? req.body.note.trim()
       : 'Archived by moderator';
-    await resource.save();
+
+    const updated = await Resource.findByIdAndUpdate(
+      resource._id,
+      {
+        verificationStatus: 'archived',
+        verifiedBy: req.user._id,
+        verifiedAt: new Date(),
+        verificationNote,
+      },
+      { new: true }
+    );
 
     res.json({
       success: true,
       message: 'Resource archived and removed from public view.',
-      resource,
+      resource: updated,
     });
   } catch (err) {
     next(err);
